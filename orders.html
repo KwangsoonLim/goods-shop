@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>내 결제 내역 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <h1 class="page-title">내 결제 내역</h1>
+    <p class="page-sub">내가 주문한 굿즈를 최신순으로 보여드려요.</p>
+    <div id="msg" class="msg error hidden"></div>
+    <div id="list"><div class="spinner"></div></div>
+  </main>
+
+  <script>
+    (async () => {
+      const user = await requireLogin();
+      if (!user) return;
+      renderHeader("orders");
+
+      // 보안 규칙(RLS)이 남의 주문을 막아 주지만, 관리자는 전체가 보이므로 내 것만 거른다
+      const { data, error } = await sb.from("orders")
+        .select("id, order_name, quantity, amount, status, created_at, paid_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      const list = document.getElementById("list");
+      if (error) {
+        list.innerHTML = "";
+        const m = document.getElementById("msg");
+        m.textContent = "결제 내역을 불러오지 못했어요: " + error.message;
+        m.classList.remove("hidden");
+        return;
+      }
+      if (!data.length) {
+        list.innerHTML = `<div class="panel empty">아직 주문한 굿즈가 없어요.<br><br>
+          <a class="btn-cta" href="index.html">굿즈 보러 가기</a></div>`;
+        return;
+      }
+
+      list.innerHTML = `
+        <div class="table-wrap"><table>
+          <thead><tr><th>주문일시</th><th>상품</th><th class="num">수량</th><th class="num">금액</th><th>상태</th></tr></thead>
+          <tbody>${data.map((o) => `
+            <tr>
+              <td data-label="주문일시">${fmtDate(o.created_at)}</td>
+              <td data-label="상품">${escapeHtml(o.order_name)}</td>
+              <td data-label="수량" class="num">${o.quantity}</td>
+              <td data-label="금액" class="num">${won(o.amount)}</td>
+              <td data-label="상태">${statusBadge(o.status)}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table></div>
+        <p class="hint" style="margin-top:12px">‘결제 대기’는 결제창을 열었다가 끝까지 진행하지 않은 주문이에요. 돈은 나가지 않았어요.</p>`;
+    })();
+  </script>
+</body>
+</html>

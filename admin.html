@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>관리자 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <h1 class="page-title">관리자 · 전체 결제 내역</h1>
+    <p class="page-sub">모든 회원의 주문을 볼 수 있어요.</p>
+
+    <div id="denied" class="panel empty hidden">
+      🔒 관리자만 볼 수 있는 페이지예요.<br><br>
+      <a class="btn-cta" href="index.html">홈으로</a>
+    </div>
+
+    <div id="content" class="hidden">
+      <div class="summary">
+        <div class="stat"><div class="k">결제 완료 금액</div><div class="v" id="s-total">-</div></div>
+        <div class="stat"><div class="k">결제 완료 건수</div><div class="v" id="s-count">-</div></div>
+        <div class="stat"><div class="k">구매한 회원 수</div><div class="v" id="s-buyers">-</div></div>
+        <div class="stat"><div class="k">전체 주문 (대기·실패 포함)</div><div class="v" id="s-all">-</div></div>
+      </div>
+
+      <div class="toolbar">
+        <select id="f-status" aria-label="상태로 거르기">
+          <option value="">전체 상태</option>
+          <option value="paid">결제 완료</option>
+          <option value="pending">결제 대기</option>
+          <option value="failed">결제 실패</option>
+        </select>
+        <input id="f-q" type="search" placeholder="이메일 또는 상품명 검색" aria-label="검색">
+      </div>
+      <div id="list"></div>
+    </div>
+    <div id="msg" class="msg error hidden"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let orders = [];
+
+    function render() {
+      const st = $("f-status").value;
+      const q = $("f-q").value.trim().toLowerCase();
+      const rows = orders.filter((o) =>
+        (!st || o.status === st) &&
+        (!q || (o.profiles?.email ?? "").toLowerCase().includes(q) || o.order_name.toLowerCase().includes(q)));
+
+      $("list").innerHTML = rows.length ? `
+        <div class="table-wrap"><table>
+          <thead><tr><th>주문일시</th><th>구매자</th><th>상품</th><th class="num">수량</th><th class="num">금액</th><th>상태</th><th>결제일시</th></tr></thead>
+          <tbody>${rows.map((o) => `
+            <tr>
+              <td data-label="주문일시">${fmtDate(o.created_at)}</td>
+              <td data-label="구매자">${escapeHtml(o.profiles?.email ?? "(탈퇴 회원)")}</td>
+              <td data-label="상품">${escapeHtml(o.order_name)}</td>
+              <td data-label="수량" class="num">${o.quantity}</td>
+              <td data-label="금액" class="num">${won(o.amount)}</td>
+              <td data-label="상태">${statusBadge(o.status)}</td>
+              <td data-label="결제일시">${fmtDate(o.paid_at)}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table></div>` : '<div class="panel empty">조건에 맞는 주문이 없어요.</div>';
+    }
+
+    (async () => {
+      const user = await requireLogin();
+      if (!user) return;
+      renderHeader("admin");
+
+      if (!(await isAdmin())) return $("denied").classList.remove("hidden");
+
+      // 관리자는 보안 규칙(RLS)에서 모든 주문을 볼 수 있다
+      const { data, error } = await sb.from("orders")
+        .select("id, order_name, quantity, amount, status, created_at, paid_at, profiles(email)")
+        .order("created_at", { ascending: false });
+      if (error) {
+        $("msg").textContent = "주문을 불러오지 못했어요: " + error.message;
+        return $("msg").classList.remove("hidden");
+      }
+      orders = data;
+
+      const paid = orders.filter((o) => o.status === "paid");
+      $("s-total").textContent = won(paid.reduce((s, o) => s + o.amount, 0));
+      $("s-count").textContent = paid.length + "건";
+      $("s-buyers").textContent = new Set(paid.map((o) => o.profiles?.email)).size + "명";
+      $("s-all").textContent = orders.length + "건";
+
+      $("content").classList.remove("hidden");
+      $("f-status").addEventListener("change", render);
+      $("f-q").addEventListener("input", render);
+      render();
+    })();
+  </script>
+</body>
+</html>

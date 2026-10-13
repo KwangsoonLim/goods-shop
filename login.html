@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>로그인 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <div class="auth-wrap panel">
+      <div class="tabs" role="tablist">
+        <button type="button" data-mode="login" class="on">로그인</button>
+        <button type="button" data-mode="signup">회원가입</button>
+      </div>
+
+      <form id="auth-form" novalidate>
+        <div class="field">
+          <label for="email">이메일</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        </div>
+        <div class="field">
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="6자 이상" required minlength="6">
+        </div>
+        <div class="field hidden" id="confirm-field">
+          <label for="password2">비밀번호 확인</label>
+          <input id="password2" type="password" autocomplete="new-password" placeholder="한 번 더 입력">
+          <span class="hint">이메일 인증 없이 바로 가입돼요.</span>
+        </div>
+        <div id="msg" class="msg hidden"></div>
+        <button type="submit" class="btn-cta block" id="submit-btn">로그인</button>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    let mode = "login";
+    const $ = (id) => document.getElementById(id);
+    const next = new URLSearchParams(location.search).get("next");
+
+    function showMsg(text, type = "error") {
+      $("msg").textContent = text;
+      $("msg").className = "msg " + type;
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+      $("confirm-field").classList.toggle("hidden", m !== "signup");
+      $("submit-btn").textContent = m === "signup" ? "회원가입" : "로그인";
+      $("password").autocomplete = m === "signup" ? "new-password" : "current-password";
+      $("msg").className = "msg hidden";
+    }
+    document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+    // 로그인 성공 후 이동할 곳: 원래 가려던 페이지 → 관리자면 관리자 페이지 → 상품 목록
+    async function goAfterLogin() {
+      if (next && /^[\w.-]+\.html/.test(next)) return location.replace(next);
+      location.replace((await isAdmin()) ? "admin.html" : "index.html");
+    }
+
+    const ERRORS = {
+      "Invalid login credentials": "이메일 또는 비밀번호가 맞지 않아요.",
+      "User already registered": "이미 가입된 이메일이에요. 로그인해 주세요.",
+    };
+
+    $("auth-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("email").value.trim();
+      const password = $("password").value;
+      if (!/^\S+@\S+\.\S+$/.test(email)) return showMsg("이메일 형식을 확인해 주세요.");
+      if (password.length < 6) return showMsg("비밀번호는 6자 이상이어야 해요.");
+      if (mode === "signup" && password !== $("password2").value) return showMsg("비밀번호 확인이 일치하지 않아요.");
+
+      $("submit-btn").disabled = true;
+      const { error } = mode === "signup"
+        ? await sb.auth.signUp({ email, password })
+        : await sb.auth.signInWithPassword({ email, password });
+      $("submit-btn").disabled = false;
+
+      if (error) return showMsg(ERRORS[error.message] ?? error.message);
+      goAfterLogin();
+    });
+
+    (async () => {
+      if (await getUser()) return goAfterLogin();   // 이미 로그인한 상태
+      renderHeader("login");
+    })();
+  </script>
+</body>
+</html>

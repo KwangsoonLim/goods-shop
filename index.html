@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://js.tosspayments.com/v2/standard"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <section class="hero">
+      <h1>오늘의 굿즈</h1>
+      <p>마음에 드는 굿즈를 골라 바로 결제해 보세요.</p>
+      <span class="test-note">테스트 결제 모드 · 실제로 돈이 나가지 않아요</span>
+    </section>
+
+    <div id="msg" class="msg error hidden"></div>
+    <div id="products" class="grid"><div class="spinner"></div></div>
+  </main>
+
+  <!-- 결제 모달 -->
+  <div id="checkout" class="modal-back hidden" role="dialog" aria-modal="true" aria-labelledby="co-name">
+    <div class="modal">
+      <button type="button" class="modal-close" id="co-close" aria-label="닫기">×</button>
+      <div class="order-line">
+        <div class="order-thumb" id="co-thumb"></div>
+        <div style="flex:1; min-width:0">
+          <div style="font-weight:700" id="co-name"></div>
+          <div class="hint" id="co-price"></div>
+        </div>
+        <div class="qty">
+          <button type="button" id="qty-minus" aria-label="수량 빼기">−</button>
+          <span id="qty">1</span>
+          <button type="button" id="qty-plus" aria-label="수량 더하기">+</button>
+        </div>
+      </div>
+      <div class="total-row"><span>결제 금액</span><strong id="co-total"></strong></div>
+      <div id="payment-method"></div>
+      <div id="agreement"></div>
+      <div id="co-msg" class="msg error hidden"></div>
+      <button type="button" class="btn-cta block" id="pay-btn" disabled>결제하기</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let products = [];
+    let current = null;   // 지금 모달에 띄운 상품
+    let qty = 1;
+    let widgets = null;   // 토스 결제위젯 (처음 결제할 때 한 번만 만든다)
+    let user = null;
+
+    function card(p) {
+      return `
+        <article class="product">
+          <div class="product-img" style="background:${escapeHtml(p.color)}22">${escapeHtml(p.emoji)}</div>
+          <div class="product-body">
+            <h3 class="product-name">${escapeHtml(p.name)}</h3>
+            <p class="product-desc">${escapeHtml(p.description)}</p>
+            <div class="product-price">${won(p.price)}</div>
+            <button type="button" class="btn-cta block" data-buy="${p.id}">구매하기</button>
+          </div>
+        </article>`;
+    }
+
+    async function loadProducts() {
+      const { data, error } = await sb.from("products").select("*").order("id");
+      if (error) {
+        $("products").innerHTML = "";
+        $("msg").textContent = "상품을 불러오지 못했어요: " + error.message;
+        $("msg").classList.remove("hidden");
+        return;
+      }
+      products = data;
+      $("products").innerHTML = data.length ? data.map(card).join("") : '<p class="empty">아직 등록된 상품이 없어요.</p>';
+    }
+
+    $("products").addEventListener("click", async (e) => {
+      const id = e.target.closest("[data-buy]")?.dataset.buy;
+      if (!id) return;
+      user = await requireLogin();
+      if (user) openCheckout(products.find((p) => String(p.id) === id));
+    });
+
+    async function openCheckout(p) {
+      current = p; qty = 1;
+      $("co-thumb").textContent = p.emoji;
+      $("co-thumb").style.background = p.color + "22";
+      $("co-name").textContent = p.name;
+      $("co-price").textContent = "개당 " + won(p.price);
+      $("co-msg").classList.add("hidden");
+      $("checkout").classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      await updateAmount();
+    }
+
+    function closeCheckout() {
+      $("checkout").classList.add("hidden");
+      document.body.style.overflow = "";
+    }
+    $("co-close").addEventListener("click", closeCheckout);
+    $("checkout").addEventListener("click", (e) => { if (e.target.id === "checkout") closeCheckout(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCheckout(); });
+
+    async function updateAmount() {
+      const total = current.price * qty;
+      $("qty").textContent = qty;
+      $("co-total").textContent = won(total);
+      $("qty-minus").disabled = qty <= 1;
+      $("qty-plus").disabled = qty >= 99;
+
+      if (!widgets) {
+        // 결제위젯 준비: 결제수단 선택 화면과 약관 화면을 모달 안에 그린다
+        const toss = TossPayments(APP_CONFIG.TOSS_CLIENT_KEY);
+        widgets = toss.widgets({ customerKey: user.id });
+        await widgets.setAmount({ currency: "KRW", value: total });
+        await Promise.all([
+          widgets.renderPaymentMethods({ selector: "#payment-method", variantKey: "DEFAULT" }),
+          widgets.renderAgreement({ selector: "#agreement", variantKey: "AGREEMENT" }),
+        ]);
+        $("pay-btn").disabled = false;
+      } else {
+        await widgets.setAmount({ currency: "KRW", value: total });
+      }
+    }
+    $("qty-minus").addEventListener("click", () => { if (qty > 1) { qty--; updateAmount(); } });
+    $("qty-plus").addEventListener("click", () => { if (qty < 99) { qty++; updateAmount(); } });
+
+    $("pay-btn").addEventListener("click", async () => {
+      $("pay-btn").disabled = true;
+      $("co-msg").classList.add("hidden");
+      try {
+        // 1) 주문을 먼저 DB에 저장한다. 금액은 DB가 상품 가격으로 직접 계산한다.
+        const { data: order, error } = await sb.from("orders")
+          .insert({ product_id: current.id, quantity: qty })
+          .select().single();
+        if (error) throw new Error("주문을 만들지 못했어요: " + error.message);
+
+        // 2) DB가 계산한 금액으로 토스 결제창을 연다.
+        await widgets.setAmount({ currency: "KRW", value: order.amount });
+        await widgets.requestPayment({
+          orderId: order.id,
+          orderName: order.order_name,
+          customerEmail: user.email,
+          successUrl: new URL("success.html", location.href).href,
+          failUrl: new URL("fail.html", location.href).href,
+        });
+      } catch (err) {
+        // 사용자가 결제창을 닫은 경우도 여기로 온다
+        if (err?.code !== "USER_CANCEL") {
+          $("co-msg").textContent = err.message || "결제를 시작하지 못했어요.";
+          $("co-msg").classList.remove("hidden");
+        }
+        $("pay-btn").disabled = false;
+      }
+    });
+
+    renderHeader("home");
+    loadProducts();
+  </script>
+</body>
+</html>

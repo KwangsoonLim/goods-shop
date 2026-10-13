@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>결제 확인 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <div class="result panel" id="box">
+      <div class="spinner"></div>
+      <h1>결제를 확인하고 있어요</h1>
+      <p class="page-sub">창을 닫지 말고 잠시만 기다려 주세요.</p>
+    </div>
+  </main>
+
+  <script>
+    // 토스 결제창에서 돌아오면 URL에 paymentKey, orderId, amount 가 붙어 있다.
+    // 이 값을 서버 함수(confirm-payment)로 보내 최종 승인을 받아야 결제가 끝난다.
+    const params = new URLSearchParams(location.search);
+    const box = document.getElementById("box");
+
+    function fail(message) {
+      box.innerHTML = `
+        <div class="icon">⚠️</div>
+        <h1>결제를 완료하지 못했어요</h1>
+        <p class="page-sub">${escapeHtml(message)}</p>
+        <div class="actions">
+          <a class="btn-line" href="orders.html">내 결제 내역</a>
+          <a class="btn-cta" href="index.html">상품으로 돌아가기</a>
+        </div>`;
+    }
+
+    (async () => {
+      renderHeader();
+      const user = await requireLogin();
+      if (!user) return;
+
+      const { data, error } = await sb.functions.invoke("confirm-payment", {
+        body: {
+          paymentKey: params.get("paymentKey"),
+          orderId: params.get("orderId"),
+          amount: Number(params.get("amount")),
+        },
+      });
+
+      if (error) {
+        let message = "알 수 없는 오류가 발생했어요.";
+        try { message = (await error.context.json()).message ?? message; } catch {}
+        return fail(message);
+      }
+
+      const o = data.order;
+      history.replaceState(null, "", "success.html");   // 새로고침해도 다시 승인 요청하지 않도록
+      box.innerHTML = `
+        <div class="icon">🎉</div>
+        <h1>결제가 완료됐어요</h1>
+        <p class="page-sub">구매해 주셔서 감사합니다.</p>
+        <dl>
+          <dt>상품</dt><dd>${escapeHtml(o.order_name)}</dd>
+          <dt>결제 금액</dt><dd>${won(o.amount)}</dd>
+          <dt>결제 일시</dt><dd>${fmtDate(o.paid_at)}</dd>
+          <dt>주문번호</dt><dd>${escapeHtml(o.id)}</dd>
+        </dl>
+        <div class="actions">
+          <a class="btn-line" href="index.html">쇼핑 계속하기</a>
+          <a class="btn-cta" href="orders.html">내 결제 내역 보기</a>
+        </div>`;
+    })();
+  </script>
+</body>
+</html>

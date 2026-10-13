@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>결제 실패 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <div class="result panel">
+      <div class="icon">😢</div>
+      <h1>결제가 완료되지 않았어요</h1>
+      <p class="page-sub" id="reason">결제가 취소되었거나 문제가 생겼어요.</p>
+      <dl id="detail" class="hidden"></dl>
+      <div class="actions">
+        <a class="btn-line" href="orders.html">내 결제 내역</a>
+        <a class="btn-cta" href="index.html">다시 시도하기</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // 토스가 실패 시 code, message, orderId 를 URL에 붙여 보내 준다.
+    const p = new URLSearchParams(location.search);
+    if (p.get("message")) document.getElementById("reason").textContent = p.get("message");
+    if (p.get("code")) {
+      const dl = document.getElementById("detail");
+      dl.innerHTML = `<dt>오류 코드</dt><dd>${escapeHtml(p.get("code"))}</dd>` +
+        (p.get("orderId") ? `<dt>주문번호</dt><dd>${escapeHtml(p.get("orderId"))}</dd>` : "");
+      dl.classList.remove("hidden");
+    }
+    renderHeader();
+  </script>
+</body>
+</html>

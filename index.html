@@ -30,8 +30,8 @@
       <button type="button" class="modal-close" id="co-close" aria-label="닫기">×</button>
       <div class="order-line">
         <div class="order-thumb" id="co-thumb"></div>
-        <div style="flex:1; min-width:0">
-          <div style="font-weight:700" id="co-name"></div>
+        <div class="order-info">
+          <div class="order-name" id="co-name"></div>
           <div class="hint" id="co-price"></div>
         </div>
         <div class="qty">
@@ -140,7 +140,7 @@
         const { data: order, error } = await sb.from("orders")
           .insert({ product_id: current.id, quantity: qty })
           .select().single();
-        if (error) throw new Error("주문을 만들지 못했어요: " + error.message);
+        if (error) throw new Error("주문을 만들지 못했어요. 다시 시도해 주세요. (" + error.message + ")");
 
         // 2) DB가 계산한 금액으로 토스 결제창을 연다.
         await widgets.setAmount({ currency: "KRW", value: order.amount });
@@ -154,7 +154,7 @@
       } catch (err) {
         // 사용자가 결제창을 닫은 경우도 여기로 온다
         if (err?.code !== "USER_CANCEL") {
-          $("co-msg").textContent = err.message || "결제를 시작하지 못했어요.";
+          $("co-msg").textContent = err.message || "결제를 시작하지 못했어요. 다시 시도해 주세요.";
           $("co-msg").classList.remove("hidden");
         }
         $("pay-btn").disabled = false;

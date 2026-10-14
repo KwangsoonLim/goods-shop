@@ -39,6 +39,7 @@ async function renderHeader(active) {
         ${admin ? link("admin.html", "관리자", "admin") : ""}
         ${user
           ? `<span class="who" title="${escapeHtml(user.email)}">${escapeHtml(user.email)}</span>
+             ${link("my.html", "My", "my")}
              <button type="button" class="btn-ghost" id="logout-btn">로그아웃</button>`
           : link("login.html", "로그인", "login")}
       </nav>

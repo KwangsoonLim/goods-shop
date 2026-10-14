@@ -17,6 +17,7 @@
     <p class="page-sub">내가 주문한 굿즈를 최신순으로 보여드려요.</p>
     <div id="msg" class="msg error hidden"></div>
     <div id="list"><div class="spinner"></div></div>
+    <p class="page-foot"><a class="text-link" href="withdraw.html">회원탈퇴</a></p>
   </main>
 
   <script>
@@ -41,16 +42,16 @@
       }
       if (!data.length) {
         list.innerHTML = `<div class="panel empty">아직 주문한 굿즈가 없어요.<br><br>
-          <a class="btn-cta" href="index.html">굿즈 보러 가기</a></div>`;
+          <a class="btn-cta" href="index.html">상품 보러 가기</a></div>`;
         return;
       }
 
       list.innerHTML = `
         <div class="table-wrap"><table>
-          <thead><tr><th>주문일시</th><th>상품</th><th class="num">수량</th><th class="num">금액</th><th>상태</th></tr></thead>
+          <thead><tr><th>주문 일시</th><th>상품</th><th class="num">수량</th><th class="num">금액</th><th>상태</th></tr></thead>
           <tbody>${data.map((o) => `
             <tr>
-              <td data-label="주문일시">${fmtDate(o.created_at)}</td>
+              <td data-label="주문 일시">${fmtDate(o.created_at)}</td>
               <td data-label="상품">${escapeHtml(o.order_name)}</td>
               <td data-label="수량" class="num">${o.quantity}</td>
               <td data-label="금액" class="num">${won(o.amount)}</td>
@@ -58,7 +59,7 @@
             </tr>`).join("")}
           </tbody>
         </table></div>
-        <p class="hint" style="margin-top:12px">‘결제 대기’는 결제창을 열었다가 끝까지 진행하지 않은 주문이에요. 돈은 나가지 않았어요.</p>`;
+        <p class="hint after">‘결제 대기’는 결제창을 열었다가 끝까지 진행하지 않은 주문이에요. 돈은 나가지 않았어요.</p>`;
     })();
   </script>
 </body>

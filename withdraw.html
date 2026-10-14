@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>회원탈퇴 · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <div class="narrow" id="form-box">
+      <h1 class="page-title">회원탈퇴</h1>
+      <p class="page-sub">탈퇴하기 전에 아래 내용을 확인해 주세요.</p>
+
+      <div id="denied" class="panel empty hidden">
+        🔒 관리자 계정은 탈퇴할 수 없어요.<br><br>
+        <a class="btn-line" href="index.html">상품 보러 가기</a>
+      </div>
+
+      <form id="withdraw-form" class="panel hidden" novalidate>
+        <ul class="notice">
+          <li><strong id="me"></strong> 계정이 삭제돼요.</li>
+          <li>내 결제 내역을 더 이상 볼 수 없어요.</li>
+          <li>결제 기록은 가게 관리를 위해 이메일 없이 남아요.</li>
+          <li>같은 이메일로 언제든 다시 가입할 수 있어요.</li>
+        </ul>
+
+        <div class="field">
+          <label for="password">비밀번호 확인</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="지금 쓰는 비밀번호">
+          <span class="hint">본인이 맞는지 한 번 더 확인해요.</span>
+        </div>
+
+        <label class="check">
+          <input type="checkbox" id="agree">
+          위 내용을 모두 확인했어요
+        </label>
+
+        <div id="msg" class="msg error hidden"></div>
+        <div class="actions">
+          <a class="btn-line" href="index.html">상품 보러 가기</a>
+          <button type="submit" class="btn-danger" id="submit-btn" disabled>회원탈퇴</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="done" class="result panel hidden">
+      <div class="icon">👋</div>
+      <h1>탈퇴했어요</h1>
+      <p class="page-sub">그동안 굿즈샵을 이용해 주셔서 고마워요.</p>
+      <div class="actions">
+        <a class="btn-cta" href="index.html">상품 보러 가기</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function showMsg(text) {
+      $("msg").textContent = text;
+      $("msg").classList.remove("hidden");
+    }
+
+    $("agree").addEventListener("change", () => { $("submit-btn").disabled = !$("agree").checked; });
+
+    $("withdraw-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      $("msg").classList.add("hidden");
+      const password = $("password").value;
+      if (!password) return showMsg("비밀번호를 입력해 주세요.");
+      if (!confirm("회원탈퇴할까요?\n탈퇴하면 되돌릴 수 없어요.")) return;
+
+      $("submit-btn").disabled = true;
+      $("submit-btn").textContent = "탈퇴하고 있어요…";
+      const { error } = await sb.functions.invoke("delete-account", { body: { password } });
+
+      if (error) {
+        let message = "탈퇴하지 못했어요. 다시 시도해 주세요.";
+        try { message = (await error.context.json()).message ?? message; } catch {}
+        $("submit-btn").disabled = !$("agree").checked;
+        $("submit-btn").textContent = "회원탈퇴";
+        return showMsg(message);
+      }
+
+      // 계정은 이미 지워졌으니 이 브라우저에 남은 로그인 정보만 지운다
+      await sb.auth.signOut({ scope: "local" });
+      $("form-box").classList.add("hidden");
+      $("done").classList.remove("hidden");
+      renderHeader("my");
+    });
+
+    (async () => {
+      const user = await requireLogin();
+      if (!user) return;
+      renderHeader("my");
+      if (await isAdmin()) return $("denied").classList.remove("hidden");
+      $("me").textContent = user.email;
+      $("withdraw-form").classList.remove("hidden");
+    })();
+  </script>
+</body>
+</html>

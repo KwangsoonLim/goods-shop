@@ -8,11 +8,12 @@
    ├──▶ Supabase Auth ........ 회원가입/로그인 (이메일 인증 없음)
    ├──▶ Supabase DB (REST) ... products 조회, orders 생성·조회 (RLS로 보호)
    ├──▶ Edge Function confirm-payment ── TOSS_SECRET_KEY ──▶ 토스 결제 승인 API
+   ├──▶ Edge Function delete-account ... 회원탈퇴 (비밀번호 재확인 후 계정 삭제)
    │
    └──▶ 토스 결제위젯 SDK v2 (client 키) ── 결제창 ──▶ success.html / fail.html 로 복귀
 ```
 
-서버 코드는 Edge Function 하나뿐이다. 나머지는 브라우저가 Supabase를 직접 호출하고, 그 접근 범위는 DB의 RLS(행 단위 보안 규칙)가 제한한다.
+서버 코드는 Edge Function 두 개(결제 승인, 회원탈퇴)뿐이다. 나머지는 브라우저가 Supabase를 직접 호출하고, 그 접근 범위는 DB의 RLS(행 단위 보안 규칙)가 제한한다.
 
 ## 파일
 
@@ -23,12 +24,15 @@
 | `success.html` | URL의 `paymentKey/orderId/amount`를 `confirm-payment`로 보내 최종 승인을 받는다. 승인 뒤 `history.replaceState`로 URL 파라미터를 지워서 새로고침해도 다시 요청하지 않게 한다. |
 | `fail.html` | 토스가 넘겨준 `code/message/orderId`를 보여준다. |
 | `orders.html` | 내 주문 목록 (`user_id = 나`). |
+| `withdraw.html` | 회원탈퇴. 비밀번호와 확인 체크를 받은 뒤 `delete-account`를 호출하고, 성공하면 이 브라우저의 로그인 정보를 지운다. 관리자 계정은 막는다. My 메뉴(`my.html`)와 `orders.html` 아래 "회원탈퇴" 링크로 들어간다. |
+| `my.html` | My 메뉴. 로그인한 이메일과 "내 결제 내역 보기"·"회원탈퇴" 버튼을 보여준다. 관리자에게는 회원탈퇴 버튼을 숨긴다. 상단 메뉴의 "My" 링크는 `renderHeader`가 로그인한 사람에게만, 로그아웃 버튼 바로 왼쪽에 그린다. |
 | `admin.html` | `is_admin()` 결과가 false면 차단한다. 관리자에게는 전체 주문, 구매자 이메일, 합계, 상태 필터, 검색을 보여준다. |
 | `js/config.js` | 공개 키(Supabase URL/publishable 키, 토스 client 키) |
 | `js/common.js` | `sb` 클라이언트, `getUser`, `isAdmin`, `requireLogin`, `renderHeader`, `won`, `fmtDate`, `statusBadge`, `escapeHtml` |
 | `css/style.css` | 색은 `:root` 변수로 둔다. CTA는 `.btn-cta`(주황). 640px 이하 화면에서는 표가 카드 형태로 바뀐다. |
 | `supabase/schema.sql` | 테이블, 함수, 트리거, RLS, 예시 상품. 여러 번 실행해도 안전하다. |
 | `supabase/functions/confirm-payment/index.ts` | 결제 승인 Edge Function |
+| `supabase/functions/delete-account/index.ts` | 회원탈퇴 Edge Function. 로그인 확인 → 관리자면 거부 → 비밀번호 재확인 → `auth.admin.deleteUser` |
 
 ## 결제 흐름
 
@@ -51,13 +55,14 @@
 |---|---|---|
 | `products` | id, name, description, price, emoji, color | 누구나 SELECT |
 | `profiles` | id(=auth.users.id), email, is_admin | 본인 또는 관리자 SELECT. 가입 시 트리거 `handle_new_user`가 자동 생성한다. |
-| `orders` | id(uuid, 토스 orderId로 사용), user_id, product_id, quantity, amount, order_name, status(pending/paid/failed), payment_key, created_at, paid_at | 본인 또는 관리자 SELECT, 본인 INSERT. UPDATE/DELETE 정책이 없으므로 상태는 service role(Edge Function)만 바꿀 수 있다. |
+| `orders` | id(uuid, 토스 orderId로 사용), user_id(탈퇴하면 null), product_id, quantity, amount, order_name, status(pending/paid/failed), payment_key, created_at, paid_at | 본인 또는 관리자 SELECT, 본인 INSERT. UPDATE/DELETE 정책이 없으므로 상태는 service role(Edge Function)만 바꿀 수 있다. |
 
+- 회원탈퇴: auth.users를 지우면 `profiles`는 함께 지워지고(cascade), `orders.user_id`는 null이 된다(set null). 결제 기록은 이메일 없이 남고, 관리자 화면에는 "(탈퇴 회원)"으로 보인다.
 - `is_admin()`: `security definer` 함수로, `profiles.is_admin`을 읽는다. RLS 정책 안과 프론트(`sb.rpc('is_admin')`)에서 함께 쓴다.
 - 관리자 지정: `update profiles set is_admin = true where email = '...'`
 
 ## 설정값
 
 - Auth: `mailer_autoconfirm = true`, `site_url = https://kwangsoonlim.github.io/goods-shop/`, 허용 리다이렉트 URL은 localhost:8765와 Pages 주소다.
-- Edge Function: `verify_jwt = false`(게이트웨이 검증을 끄고 함수 안에서 `auth.getUser`로 확인한다), secret `TOSS_SECRET_KEY`.
+- Edge Function(두 함수 모두): `verify_jwt = false`(게이트웨이 검증을 끄고 함수 안에서 `auth.getUser`로 확인한다), secret `TOSS_SECRET_KEY`.
 - 토스 키: 문서용 공개 테스트 키(`test_gck_docs_…` / `test_gsk_docs_…`)를 쓴다. 실제 판매로 바꿀 때는 토스 가맹점 키로 교체한다. client 키는 `js/config.js`, 시크릿 키는 Supabase secret이다.

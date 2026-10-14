@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My · 굿즈샵</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+</head>
+<body>
+  <header id="site-header"></header>
+
+  <main>
+    <div class="narrow">
+      <h1 class="page-title">My</h1>
+      <p class="page-sub"><strong id="me"></strong> 계정으로 로그인했어요.</p>
+
+      <div class="panel menu-list">
+        <a class="btn-line block" href="orders.html">내 결제 내역 보기</a>
+        <a class="btn-line block" href="withdraw.html" id="withdraw-link">회원탈퇴</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (async () => {
+      const user = await requireLogin();
+      if (!user) return;
+      renderHeader("my");
+      document.getElementById("me").textContent = user.email;
+      // 관리자 계정은 탈퇴할 수 없으므로 버튼을 숨긴다
+      if (await isAdmin()) document.getElementById("withdraw-link").classList.add("hidden");
+    })();
+  </script>
+</body>
+</html>

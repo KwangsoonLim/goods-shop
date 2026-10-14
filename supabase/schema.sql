@@ -43,7 +43,7 @@ $$;
 -- ───────── 주문 ─────────
 create table if not exists public.orders (
   id          uuid primary key default gen_random_uuid(),   -- 토스 orderId 로 그대로 사용
-  user_id     uuid not null default auth.uid() references public.profiles(id) on delete cascade,
+  user_id     uuid default auth.uid() references public.profiles(id) on delete set null,   -- 탈퇴하면 null (결제 기록은 남김)
   product_id  bigint not null references public.products(id),
   quantity    integer not null check (quantity between 1 and 99),
   amount      integer not null default 0,
@@ -54,6 +54,12 @@ create table if not exists public.orders (
   paid_at     timestamptz
 );
 create index if not exists orders_user_id_idx on public.orders(user_id);
+
+-- 회원탈퇴해도 주문(결제 기록)은 지우지 않고 user_id만 비운다. 예전에 만든 DB도 같은 규칙으로 바꾼다.
+alter table public.orders alter column user_id drop not null;
+alter table public.orders drop constraint if exists orders_user_id_fkey;
+alter table public.orders add constraint orders_user_id_fkey
+  foreign key (user_id) references public.profiles(id) on delete set null;
 
 -- 주문 생성 시 금액·상품명·상태를 DB가 직접 채운다 (브라우저에서 보낸 값은 무시)
 create or replace function public.prepare_order()
